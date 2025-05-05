@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pdfplumber
+pikepdf
+python-multipart
+# Optional for OCR
+pytesseract
+Pillow
+opencv-python 
