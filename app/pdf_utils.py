@@ -2,14 +2,20 @@ import io
 import pikepdf
 import pdfplumber
 from app.parsers.axis_parser import parse_axis_statement
-from app.parsers.hdfc_parser import parse_hdfc_statement
+from app.parsers.hdfc_parser import parse_hdfc_statement, parse_hdfc_account_statement
 
 def detect_bank(text: str) -> str:
-    text_lower = text.lower()
-    if "axis bank" in text_lower:
+    # Normalize text for robust matching
+    text_norm = ' '.join(text.lower().split())
+    # Check for HDFC Bank (account or credit card)
+    if "hdfc bank" in text_norm or "we understand your world" in text_norm or "hdfc" in text_norm:
+        if "withdrawal amt." in text_norm or "deposit amt." in text_norm:
+            return "hdfc_account"
+        else:
+            return "hdfc"
+    # Add more banks as needed
+    elif "axis bank" in text_norm:
         return "axis"
-    elif "hdfc bank" in text_lower or "hdfc credit card" in text_lower:
-        return "hdfc"
     else:
         return "unknown"
 
@@ -24,6 +30,7 @@ def process_pdf(file_bytes: bytes, password: str) -> dict:
         # Extract text with pdfplumber
         with pdfplumber.open(unlocked_pdf) as pdf:
             text = "\n".join(page.extract_text() or '' for page in pdf.pages)
+            print(text)
 
         # Detect bank and parse accordingly
         bank = detect_bank(text)
@@ -31,6 +38,8 @@ def process_pdf(file_bytes: bytes, password: str) -> dict:
             data = parse_axis_statement(text)
         elif bank == "hdfc":
             data = parse_hdfc_statement(text)
+        elif bank == "hdfc_account":
+            data = parse_hdfc_account_statement(text)
         else:
             return {"status": "error", "message": "Bank not recognized or supported."}
 
