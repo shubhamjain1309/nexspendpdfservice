@@ -29,15 +29,19 @@ async def read_root():
 @app.post("/extract")
 async def extract_pdf(
     file: UploadFile = File(...),
-    password: str = Form(...)
+    password: str = Form(...),
+    bank: str = Form(...),
+    document_type: str = Form(...)
 ):
     try:
         content = await file.read()
-        result = process_pdf(content, password)
+        result = process_pdf(content, password, bank, document_type)
+        print("Returning result from /extract:", result)
         if result["status"] == "error":
             return JSONResponse(status_code=400, content=result)
         return result
     except Exception as e:
+        print(f"Exception in /extract endpoint: {e}")
         return JSONResponse(status_code=400, content={
             "status": "error",
             "message": f"Unable to unlock or parse the PDF: {str(e)}"

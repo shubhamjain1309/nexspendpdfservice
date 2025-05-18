@@ -108,6 +108,12 @@
     </style>
 </head>
 <body>
+    <script>
+      // Change this for local vs. production
+      window.PDF_API_URL = "http://localhost:8000/extract";
+      // For production, you might use:
+      // window.PDF_API_URL = "https://grim-nathalia-shubhamjain1309-109455fb.koyeb.app/extract";
+    </script>
     <div class="container">
         <h1>PDF Statement Extractor</h1>
         <form id="uploadForm">
@@ -119,6 +125,27 @@
             <div class="form-group">
                 <label for="password">PDF Password:</label>
                 <input type="password" id="password" name="password" required>
+            </div>
+            <div class="form-group">
+                <label for="bank">Select Bank:</label>
+                <select id="bank" name="bank" required>
+                    <option value="">--Select Bank--</option>
+                    <option value="hdfc">HDFC</option>
+                    <option value="axis">Axis</option>
+                    <option value="icici">ICICI</option>
+                    <option value="sbi">SBI</option>
+                    <option value="kotak">Kotak</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="document_type">Select Document Type:</label>
+                <select id="document_type" name="document_type" required>
+                    <option value="">--Select Document Type--</option>
+                    <option value="bank_statement">Bank Statement</option>
+                    <option value="credit_card_statement">Credit Card Statement</option>
+                    <option value="investment_statement">Investment Statement</option>
+                </select>
             </div>
             <button type="submit" id="submitButton">Extract Data</button>
         </form>
@@ -153,6 +180,8 @@
             
             const formData = new FormData();
             const file = fileInput.files[0];
+            const bank = document.getElementById('bank').value;
+            const documentType = document.getElementById('document_type').value;
             
             if (!file) {
                 showError('Please select a PDF file');
@@ -164,8 +193,20 @@
                 return;
             }
 
+            if (!bank) {
+                showError('Please select a bank');
+                return;
+            }
+
+            if (!documentType) {
+                showError('Please select a document type');
+                return;
+            }
+
             formData.append('file', file);
             formData.append('password', passwordInput.value);
+            formData.append('bank', bank);
+            formData.append('document_type', documentType);
 
             // Disable form while processing
             submitButton.disabled = true;
@@ -177,7 +218,8 @@
             resultDiv.style.display = 'none';
 
             try {
-                const response = await fetch('https://grim-nathalia-shubhamjain1309-109455fb.koyeb.app/extract', {
+                const apiUrl = window.PDF_API_URL || 'http://localhost:8000/extract';
+                const response = await fetch(apiUrl, {
                     method: 'POST',
                     body: formData
                 });

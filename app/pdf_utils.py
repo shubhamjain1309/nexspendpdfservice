@@ -3,6 +3,7 @@ import pikepdf
 import pdfplumber
 from app.parsers.axis_parser import parse_axis_statement
 from app.parsers.hdfc_parser import parse_hdfc_statement, parse_hdfc_account_statement
+from datetime import datetime
 
 def detect_bank(text: str) -> str:
     # Normalize text for robust matching
@@ -19,7 +20,52 @@ def detect_bank(text: str) -> str:
     else:
         return "unknown"
 
-def process_pdf(file_bytes: bytes, password: str) -> dict:
+def normalize_transactions(transactions, bank, document_type):
+    normalized = []
+    for txn in transactions:
+        # Extract and normalize fields
+        raw_type = (txn.get('type') or '').lower()
+        if raw_type == 'credit':
+            tx_type = 'income'
+        elif raw_type == 'debit':
+            tx_type = 'expenses'
+        elif raw_type == 'savings':
+            tx_type = 'savings'
+        else:
+            tx_type = 'expenses'
+        # Date normalization (convert DD/MM/YYYY HH:MM:SS to ISO)
+        raw_date = txn.get('date') or txn.get('timestamp') or ''
+        timestamp = ''
+        if raw_date:
+            try:
+                timestamp = datetime.strptime(raw_date, "%d/%m/%Y %H:%M:%S").isoformat(timespec='minutes')
+            except Exception:
+                timestamp = raw_date  # fallback to raw if parsing fails
+        description = txn.get('description') or txn.get('narration') or ''
+        amount = txn.get('amount') or ''
+        category = txn.get('category') or ''
+        if not category or category.strip().lower() in ('', 'unknown'):
+            category = 'other' if tx_type != 'savings' else 'others'
+        normalized.append({
+            'timestamp': timestamp,
+            'description': description,
+            'amount': amount,
+            'type': tx_type,
+            'category': category
+        })
+    return normalized
+
+# Parser registry: (bank, document_type) -> parser function
+PARSER_REGISTRY = {
+    ('hdfc', 'bank_statement'): parse_hdfc_statement,
+    ('hdfc', 'credit_card_statement'): parse_hdfc_statement,  # Example, can be different
+    ('hdfc', 'investment_statement'): None,  # Not implemented
+    ('hdfc_account', 'bank_statement'): parse_hdfc_account_statement,
+    ('axis', 'bank_statement'): parse_axis_statement,
+    # Add more as needed
+}
+
+def process_pdf(file_bytes: bytes, password: str, bank: str, document_type: str) -> dict:
     try:
         # Unlock PDF in memory
         with pikepdf.open(io.BytesIO(file_bytes), password=password) as pdf:
@@ -30,19 +76,24 @@ def process_pdf(file_bytes: bytes, password: str) -> dict:
         # Extract text with pdfplumber
         with pdfplumber.open(unlocked_pdf) as pdf:
             text = "\n".join(page.extract_text() or '' for page in pdf.pages)
-            print(text)
+            print("Extracted text:\n", text[:500])  # Print first 500 chars for debug
 
-        # Detect bank and parse accordingly
-        bank = detect_bank(text)
-        if bank == "axis":
-            data = parse_axis_statement(text)
-        elif bank == "hdfc":
-            data = parse_hdfc_statement(text)
-        elif bank == "hdfc_account":
-            data = parse_hdfc_account_statement(text)
-        else:
-            return {"status": "error", "message": "Bank not recognized or supported."}
-
-        return {"status": "success", "data": data}
-    except Exception:
-        return {"status": "error", "message": "Unable to unlock or parse the PDF."} 
+        # Use provided bank and document_type for parser routing
+        key = (bank, document_type)
+        parser = PARSER_REGISTRY.get(key)
+        if not parser:
+            # Try fallback for hdfc_account
+            if bank == 'hdfc_account':
+                parser = PARSER_REGISTRY.get(('hdfc_account', document_type))
+            if not parser:
+                print(f"No parser for bank '{bank}' and document type '{document_type}'")
+                return {"status": "error", "message": f"No parser for bank '{bank}' and document type '{document_type}'."}
+        data = parser(text)
+        print("RAW parser output:", data)
+        transactions = data.get('transactions', [])
+        normalized = normalize_transactions(transactions, bank, document_type)
+        print("Normalized output:", normalized)
+        return {"status": "success", "data": {"transactions": normalized}}
+    except Exception as e:
+        print(f"Exception in process_pdf: {e}")
+        return {"status": "error", "message": f"Unable to unlock or parse the PDF: {str(e)}"} 
