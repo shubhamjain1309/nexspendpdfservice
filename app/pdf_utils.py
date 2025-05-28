@@ -43,6 +43,17 @@ def normalize_transactions(transactions, bank, document_type):
                 timestamp = raw_date  # fallback to raw if parsing fails
         description = txn.get('description') or txn.get('narration') or ''
         amount = txn.get('amount') or ''
+        # Truncate amount to two decimal places (as string, no rounding)
+        try:
+            amount_str = str(amount).replace(',', '')
+            if '.' in amount_str:
+                integer_part, decimal_part = amount_str.split('.', 1)
+                decimal_part = decimal_part[:2]
+                amount = integer_part + '.' + decimal_part
+            else:
+                amount = amount_str
+        except Exception:
+            pass  # leave as is if conversion fails
         category = txn.get('category') or ''
         if not category or category.strip().lower() in ('', 'unknown'):
             category = 'other' if tx_type != 'savings' else 'others'
