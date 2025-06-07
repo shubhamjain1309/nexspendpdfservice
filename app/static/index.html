@@ -111,6 +111,7 @@
     <script>
       // Change this for local vs. production
       window.PDF_API_URL = "http://localhost:8000/extract";
+      window.PDF_INVEST_API_URL = "http://localhost:8000/extract-investment";
       // For production, you might use:
       // window.PDF_API_URL = "https://grim-nathalia-shubhamjain1309-109455fb.koyeb.app/extract";
     </script>
@@ -127,8 +128,17 @@
                 <input type="password" id="password" name="password" required>
             </div>
             <div class="form-group">
+                <label for="document_type">Select Document Type:</label>
+                <select id="document_type" name="document_type" required>
+                    <option value="">--Select Document Type--</option>
+                    <option value="bank_statement">Bank Statement</option>
+                    <option value="credit_card_statement">Credit Card Statement</option>
+                    <option value="investment_statement">Investment Statement</option>
+                </select>
+            </div>
+            <div class="form-group" id="bank-group">
                 <label for="bank">Select Bank:</label>
-                <select id="bank" name="bank" required>
+                <select id="bank" name="bank">
                     <option value="">--Select Bank--</option>
                     <option value="hdfc">HDFC</option>
                     <option value="axis">Axis</option>
@@ -138,13 +148,20 @@
                     <option value="other">Other</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label for="document_type">Select Document Type:</label>
-                <select id="document_type" name="document_type" required>
-                    <option value="">--Select Document Type--</option>
-                    <option value="bank_statement">Bank Statement</option>
-                    <option value="credit_card_statement">Credit Card Statement</option>
-                    <option value="investment_statement">Investment Statement</option>
+            <div class="form-group" id="institution-group" style="display:none;">
+                <label for="institution">Select Institution:</label>
+                <select id="institution" name="institution">
+                    <option value="">--Select Institution--</option>
+                    <option value="nsdl">NSDL</option>
+                    <option value="cdsl">CDSL</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div class="form-group" id="statement-type-group" style="display:none;">
+                <label for="statement_type">Select Statement Type:</label>
+                <select id="statement_type" name="statement_type">
+                    <option value="consolidated_statement">Consolidated Statement</option>
+                    <option value="demat_statement">Demat Statement</option>
                 </select>
             </div>
             <button type="submit" id="submitButton">Extract Data</button>
@@ -175,29 +192,40 @@
             }
         });
 
+        // Show/hide fields based on document type
+        const documentTypeSelect = document.getElementById('document_type');
+        const bankGroup = document.getElementById('bank-group');
+        const institutionGroup = document.getElementById('institution-group');
+        const statementTypeGroup = document.getElementById('statement-type-group');
+
+        documentTypeSelect.addEventListener('change', function() {
+            if (this.value === 'investment_statement') {
+                bankGroup.style.display = 'none';
+                institutionGroup.style.display = 'block';
+                statementTypeGroup.style.display = 'block';
+            } else {
+                bankGroup.style.display = 'block';
+                institutionGroup.style.display = 'none';
+                statementTypeGroup.style.display = 'none';
+            }
+        });
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
             const formData = new FormData();
             const file = fileInput.files[0];
-            const bank = document.getElementById('bank').value;
-            const documentType = document.getElementById('document_type').value;
-            
+            const documentType = documentTypeSelect.value;
+            const isInvestment = documentType === 'investment_statement';
+            const apiUrl = isInvestment ? (window.PDF_INVEST_API_URL || 'http://localhost:8000/extract-investment') : (window.PDF_API_URL || 'http://localhost:8000/extract');
+
             if (!file) {
                 showError('Please select a PDF file');
                 return;
             }
-
             if (!passwordInput.value) {
                 showError('Please enter the PDF password');
                 return;
             }
-
-            if (!bank) {
-                showError('Please select a bank');
-                return;
-            }
-
             if (!documentType) {
                 showError('Please select a document type');
                 return;
@@ -205,30 +233,50 @@
 
             formData.append('file', file);
             formData.append('password', passwordInput.value);
-            formData.append('bank', bank);
-            formData.append('document_type', documentType);
+
+            if (isInvestment) {
+                const institution = document.getElementById('institution').value;
+                const statementType = document.getElementById('statement_type').value;
+                if (!institution) {
+                    showError('Please select an institution');
+                    return;
+                }
+                if (!statementType) {
+                    showError('Please select a statement type');
+                    return;
+                }
+                formData.append('institution', institution);
+                formData.append('statement_type', statementType);
+            } else {
+                const bank = document.getElementById('bank').value;
+                if (!bank) {
+                    showError('Please select a bank');
+                    return;
+                }
+                let bankToSend = bank;
+                if (bank === 'hdfc' && documentType === 'bank_statement') {
+                    bankToSend = 'hdfc_account';
+                }
+                formData.append('bank', bankToSend);
+                formData.append('document_type', documentType);
+            }
 
             // Disable form while processing
             submitButton.disabled = true;
             fileInput.disabled = true;
             passwordInput.disabled = true;
-            
             // Show loading
             loadingDiv.style.display = 'block';
             resultDiv.style.display = 'none';
 
             try {
-                const apiUrl = window.PDF_API_URL || 'http://localhost:8000/extract';
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     body: formData
                 });
-
                 const data = await response.json();
-                
                 // Hide loading
                 loadingDiv.style.display = 'none';
-                
                 // Show result
                 resultDiv.style.display = 'block';
                 if (data.status === 'success') {

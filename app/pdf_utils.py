@@ -77,6 +77,7 @@ PARSER_REGISTRY = {
 }
 
 def process_pdf(file_bytes: bytes, password: str, bank: str, document_type: str) -> dict:
+    print("[DEBUG] Entered process_pdf with bank=", bank, "document_type=", document_type)
     try:
         # Unlock PDF in memory
         with pikepdf.open(io.BytesIO(file_bytes), password=password) as pdf:

@@ -20,6 +20,7 @@ def parse_hdfc_statement(text: str) -> Dict:
     }
 
 def parse_hdfc_account_statement(text: str) -> dict:
+    print("[DEBUG] Called parse_hdfc_account_statement")
     import re
     # List of patterns/keywords to ignore
     ignore_patterns = [

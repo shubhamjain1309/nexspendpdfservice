@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import os
 from app.pdf_utils import process_pdf
+from app.investment_pdf_utils import process_investment_pdf
 
 app = FastAPI()
 
@@ -45,4 +46,24 @@ async def extract_pdf(
         return JSONResponse(status_code=400, content={
             "status": "error",
             "message": f"Unable to unlock or parse the PDF: {str(e)}"
+        })
+
+@app.post("/extract-investment")
+async def extract_investment_pdf(
+    file: UploadFile = File(...),
+    password: str = Form(...),
+    statement_type: str = Form(...),
+    institution: str = Form(...)
+):
+    """Extract holdings & transactions from investment statement PDFs."""
+    try:
+        content = await file.read()
+        result = process_investment_pdf(content, password, statement_type, institution)
+        if result.get("status") == "error":
+            return JSONResponse(status_code=400, content=result)
+        return result
+    except Exception as e:
+        return JSONResponse(status_code=400, content={
+            "status": "error",
+            "message": f"Unable to process the PDF: {str(e)}"
         }) 
