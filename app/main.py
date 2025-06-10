@@ -53,12 +53,20 @@ async def extract_investment_pdf(
     file: UploadFile = File(...),
     password: str = Form(...),
     statement_type: str = Form(...),
-    institution: str = Form(...)
+    institution: str = Form(None),
+    bank: str = Form(None)
 ):
     """Extract holdings & transactions from investment statement PDFs."""
     try:
         content = await file.read()
-        result = process_investment_pdf(content, password, statement_type, institution)
+        # Use institution if provided, else fallback to bank
+        institution_val = institution or bank
+        if not institution_val:
+            return JSONResponse(status_code=400, content={
+                "status": "error",
+                "message": "Missing institution or bank for investment statement."
+            })
+        result = process_investment_pdf(content, password, statement_type, institution_val)
         if result.get("status") == "error":
             return JSONResponse(status_code=400, content=result)
         return result

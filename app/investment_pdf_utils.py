@@ -4,6 +4,7 @@ import pikepdf
 import pdfplumber
 from datetime import datetime
 from typing import List, Dict, Any
+import logging
 
 HOLDING_REGEX = re.compile(r"^([A-Z]{2}[0-9A-Z]{9}[0-9])\s+([A-Z &\-\.\(\)]+?)\s+([0-9,]+)\s+₹\s*([0-9,]+\.[0-9]{2})\s+₹\s*([0-9,]+\.[0-9]{2})", re.MULTILINE)
 
@@ -371,18 +372,42 @@ def process_investment_pdf(file_bytes: bytes, password: str, statement_type: str
             text = "\n".join(page.extract_text() or '' for page in pdf.pages)
 
         # Extract statement period (start and end date)
+        logging.basicConfig(level=logging.DEBUG)
         period_regex = re.compile(r"Statement for the period from (\d{2}-[A-Za-z]{3}-\d{4}) to (\d{2}-[A-Za-z]{3}-\d{4})", re.IGNORECASE)
+        # More robust alternate regex: allow for any case, extra spaces, and both dash and month-abbreviation date formats
+        period_alt_regex = re.compile(r"statement\s*of\s*transactions\s*for\s*the\s*period\s*from\s*(\d{2}-\d{2}-\d{4}|\d{2}-[A-Za-z]{3}-\d{4})\s*to\s*(\d{2}-\d{2}-\d{4}|\d{2}-[A-Za-z]{3}-\d{4})", re.IGNORECASE)
         period_match = period_regex.search(text)
         period_start_iso = None
         period_end_iso = None
+        logging.debug(f"Extracted PDF text (first 500 chars): {text[:500]}")
         if period_match:
             period_start_str, period_end_str = period_match.groups()
+            logging.debug(f"Matched period (main): {period_start_str} to {period_end_str}")
             try:
                 period_start_iso = datetime.strptime(period_start_str, "%d-%b-%Y").date().isoformat()
                 period_end_iso = datetime.strptime(period_end_str, "%d-%b-%Y").date().isoformat()
             except Exception:
                 period_start_iso = period_start_str
                 period_end_iso = period_end_str
+        else:
+            # Try alternate format
+            period_alt_match = period_alt_regex.search(text)
+            if period_alt_match:
+                period_start_str, period_end_str = period_alt_match.groups()
+                logging.debug(f"Matched period (alt): {period_start_str} to {period_end_str}")
+                # Try both date formats
+                for fmt in ("%d-%m-%Y", "%d-%b-%Y"):
+                    try:
+                        period_start_iso = datetime.strptime(period_start_str, fmt).date().isoformat()
+                        period_end_iso = datetime.strptime(period_end_str, fmt).date().isoformat()
+                        break
+                    except Exception:
+                        continue
+                if not period_start_iso or not period_end_iso:
+                    period_start_iso = period_start_str
+                    period_end_iso = period_end_str
+            else:
+                logging.debug("No period header matched in PDF text.")
 
         # 3. Parse holdings
         holdings = _parse_holdings(text)
